@@ -1,12 +1,12 @@
 import csv
 import os
+import sys
 
 import talib
 import datetime
 import warnings
 import tushare as ts
 import numpy as np
-
 warnings.filterwarnings('ignore')
 import pandas as pd
 pd.set_option('display.expand_frame_repr', False)
@@ -153,24 +153,6 @@ def Long_Core(OHLCV, Hist_CP, price_cp):
     if OHLCV.MACD_hist[0] > 0:
         pass
     else:
-        # print(OHLCV)
-        for i in range(1, len(OHLCV)):
-            if OHLCV.MACD_hist[-i] < 0 and OHLCV.MACD_hist[-i - 1] > 0:
-                print("Today is ", bt.num2date(OHLCV.lines[6][0]))
-                # print("fuck")
-                print(OHLCV.low.get(size=i))
-                red_1_min_price = np.min(OHLCV.low.get(size=i))
-                red_1_mean_hist = np.mean(OHLCV.MACD_hist.get(size=i))
-                # print("red_1 is :", red_1_min_price)
-                # print(red_1)
-                # print("red_1_mean_price is : {}".format(red_1_mean_price))
-                # print("red_1_mean_hist is : {}".format(red_1_mean_hist))
-
-                # OHLCV = OHLCV[:-i]
-
-                # print("new OHLCV is :", OHLCV)
-
-
         # print("Today is ", bt.num2date(OHLCV.lines[6][0]))
         split_index = Red_Split(OHLCV)
         Red_1_Price_Zone = OHLCV.low.get(ago=split_index[0], size=split_index[0] - split_index[1] + 1)
@@ -192,6 +174,9 @@ def Long_Core(OHLCV, Hist_CP, price_cp):
                 # Hist Triple Divergence
                 if Red_2_Min_Hist < Red_1_Min_Hist * Hist_CP:
                     Go_long = True
+                    print("Go_long Day is ", bt.num2date(OHLCV.lines[6][0]))
+                    # print("Red_1_Min_Price :", Red_1_Price_Zone)
+                    # print("Red_2_Min_Price :", Red_2_Price_Zone)
     return Go_long
 
 
@@ -268,18 +253,41 @@ class MyStragegt(bt.Strategy):
 
     def next(self):
         # print("self.o_lit len is : ", len(self.o_li))
+        # date_now = bt.num2date(self.data.lines[6][0])
+        # print(self.data._name)
         if self.position.size == 0:
-            Go_long = Long_Core(self.data, Hist_CP=self.p.hist_cp, price_cp=self.p.price_cp)
-            if Go_long is True:
-                date_now = bt.num2date(self.data.lines[6][0])
-                self.buy()
-                self.price_range.append(self.data.close[0])
-                self.open_date.append(date_now)
+            # print(("len(data) : ", len(self.datas)))
+            open_symbol_list = []
+            for self.data in self.datas:
+                # print("self.data now: ", self.data._name, self.data._id)
+                Go_long = Long_Core(self.data, Hist_CP=self.p.hist_cp, price_cp=self.p.price_cp)
+                if Go_long is True:
+                    print("self.data now: ", self.data._name, self.data._id)
+                    open_symbol_list.append(self.data._name)
+                    # print("open_symbol_list is ", open_symbol_list)
+                    # TODO: 去重，保留近一个月第一次出现的Symbol
+
+            if len(open_symbol_list):
+                print("open_symbol_list is ", open_symbol_list)
+                per_weight = 1 / len(open_symbol_list)
+                print("per_weight is :", per_weight)
+                print("open day :", bt.num2date(self.data.lines[6][0]))
+                print("\n")
+                print("\n")
+                for symbol in open_symbol_list:
+                    self.buy()
+                    self.price_range.append(self.data.close[0])
+                    # self.open_date.append(date_now)
+            else:
+                # print(bt.num2date(self.data.lines[6][0]))
+                # print("当天没有背离发生的Symbol")
+                pass
+
         else:
             # TODO: Tage the High Price and cacluate the max & min
             self.position_days += 1
             self.price_range.append(self.data.high[0])
-            if self.position_days == 5:
+            if self.position_days == 9:
                 self.sell()
                 # print(self.price_range)
 
@@ -300,12 +308,12 @@ if __name__ == "__main__":
 
     """ Single Symbol """
 
-    ts_code_list = ["000001.SZ"]
+    # ts_code_list = ["000001.SZ"]
 
     """ All Symbol """
-    # dirpath = 'D:\Finance\Data\StockData\OHLCV_Data\OHLCV_Daily\OHLCV_hfq'
+    dirpath = 'D:\Finance\Data\StockData\OHLCV_Data\OHLCV_Daily\OHLCV_None'
     # dirpath = '/Users/liuyang/Desktop/Finance/Data/StockData/OHLCV_Data/OHLCV_Daily/OHLCV_hfq/'
-    # ts_code_list = Fetch_OS_Stockcode(path=dirpath)
+    ts_code_list = Fetch_OS_Stockcode(path=dirpath)
 
     """ Index Content """
     # ts.set_token('4fc4dd522aa66c2c91f7c2ad32a92fcc19dc6926deafc6b62fbca017')
@@ -318,17 +326,24 @@ if __name__ == "__main__":
     # # datapath = "D:\Finance\Data\StockData\OHLCV_Data\OHLCV_Daily\Index_OHLCV\HS300.csv"
     # OHLCV_single = Fetch_Local_Data(path=datapath)
 
-    for i, stock_code in enumerate(ts_code_list[:]):
-        print("Index : {} | Back Now: {}  ".format(i, stock_code))
+    cerebro = bt.Cerebro()
+    for i, stock_code in enumerate(ts_code_list[:50]):
+        # print("Index : {} | Back Now: {}  ".format(i, stock_code))
+
         code_path = stock_code + "." + "csv"
 
-        datapath = '/Users/liuyang/Desktop/Finance/Data/StockData/OHLCV_Data/OHLCV_Daily/OHLCV/{}'.format(code_path)
-        # datapath = 'D:\Finance\Data\StockData\OHLCV_Data\OHLCV_Daily\OHLCV_hfq\{}'.format(code_path)
+        # datapath = '/Users/liuyang/Desktop/Finance/Data/StockData/OHLCV_Data/OHLCV_Daily/OHLCV/{}'.format(code_path)
+        datapath = 'D:\Finance\Data\StockData\OHLCV_Data\OHLCV_Daily\OHLCV_None\{}'.format(code_path)
         OHLCV = Fetch_Local_Data(path=datapath)
+        OHLCV = OHLCV.drop(['pct_chg', 'amount', 'turnover_rate', 'volume_ratio'], axis=1)
         OHLCV = Add_Indicators(OHLCV)
-        cerebro = bt.Cerebro()
+        # print(OHLCV)
+        # cerebro = bt.Cerebro()
         data = BasicIndicatorsFeeded(dataname=OHLCV)
-        cerebro.adddata(data)
+        cerebro.adddata(data, name=stock_code)
+        print("\r", end="")
+        print("Data feed num : {} : ".format(i), end="")
+        sys.stdout.flush()
 
         # Save_Txt(stock_code, "st1_positionRecords_tmp")
         # Save_Txt("\n", "st1_positionRecords_tmp")
@@ -336,16 +351,18 @@ if __name__ == "__main__":
         # Save_Txt("\n", "st1_openDate_tmp")
 
         # ================ Cerebor head to tail =================
-        cerebro.addstrategy(MyStragegt)
-        # init setting
-        cerebro.broker.setcash(1000000.0)
-        cerebro.broker.setcommission(commission=0.0002)
-        cerebro.addsizer(bt.sizers.PercentSizer, percents=99)
+    cerebro.addstrategy(MyStragegt)
+    # init setting
+    cerebro.broker.setcash(100000000.0)
+    # cerebro.broker.setcommission(commission=0.0002)
+    cerebro.addsizer(bt.sizers.PercentSizer, percents=50)
 
-        # Analyze
-        results = cerebro.run()
+    # Analyze
+    results = cerebro.run()
+    print("value: ", cerebro.broker.get_value())
+    print("cash: ", cerebro.broker.getcash())
 
-        # cerebro.plot()
+    # cerebro.plot()
 
 
 
