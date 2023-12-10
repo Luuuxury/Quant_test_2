@@ -142,6 +142,7 @@ def last_day_of_month(any_day):
 class Select_Strategy(bt.Strategy):
     def __init__(self):
         self.codes = total_codes
+
     def next(self):
         today = self.data.datetime.date()
         year, month = today.year, today.month
@@ -150,6 +151,7 @@ class Select_Strategy(bt.Strategy):
             for i in range(len(self.codes)):
                 # final_weight = [0.1, 0.5, 0.3, 0.1, 0.1]
                 self.order_target_percent(target=final_weight[i], data=self.codes[i])
+
 
 if __name__ == '__main__':
     login()

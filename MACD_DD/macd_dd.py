@@ -174,7 +174,7 @@ def Long_Core(OHLCV, Hist_CP, price_cp):
                 # Hist Triple Divergence
                 if Red_2_Min_Hist < Red_1_Min_Hist * Hist_CP:
                     Go_long = True
-                    print("Go_long Day is ", bt.num2date(OHLCV.lines[6][0]))
+                    # print("Go_long Day is ", bt.num2date(OHLCV.lines[6][0]))
                     # print("Red_1_Min_Price :", Red_1_Price_Zone)
                     # print("Red_2_Min_Price :", Red_2_Price_Zone)
     return Go_long
@@ -203,7 +203,7 @@ class MyStragegt(bt.Strategy):
     params = dict(
         sleep_tag=28,
         trailpercent=0.05,
-        hist_cp=1.5,
+        hist_cp=2,
         price_cp=1.0,
     )
 
@@ -214,7 +214,7 @@ class MyStragegt(bt.Strategy):
         self.open_date = []
 
     def log(self, txt, dt=None):
-        ''' Logging function fot this strategy'''
+        ''' Logging function fot this strategy '''
         dt = dt or self.data.datetime[0]
         if isinstance(dt, float):
             dt = bt.num2date(dt)
@@ -223,28 +223,28 @@ class MyStragegt(bt.Strategy):
     def notify_order(self, order):
         if order.status in [order.Submitted]:
             # Buy/Sell order submitted/accepted to/by broker - Nothing to do
-            # self.log('ORDER ACCEPTED/SUBMITTED', dt=order.created.dt)
-            # self.order = order
+            self.log('ORDER ACCEPTED/SUBMITTED', dt=order.created.dt)
+            self.order = order
             return
 
         if order.status in [order.Expired]:
-            # self.log('BUY EXPIRED')
+            self.log('BUY EXPIRED')
             return
 
         elif order.status in [order.Completed]:
             if order.isbuy():
-                # self.log(
-                #     'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
-                #     (order.executed.price,
-                #      order.executed.value,
-                #      order.executed.comm))
+                self.log(
+                    'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
+                    (order.executed.price,
+                     order.executed.value,
+                     order.executed.comm))
                 return
 
             else:  # Sell
-                # self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
-                #          (order.executed.price,
-                #           order.executed.value,
-                #           order.executed.comm))
+                self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
+                         (order.executed.price,
+                          order.executed.value,
+                          order.executed.comm))
 
                 self.position_days = 0
 
@@ -258,49 +258,53 @@ class MyStragegt(bt.Strategy):
         if self.position.size == 0:
             # print(("len(data) : ", len(self.datas)))
             open_symbol_list = []
+            # symbol_price_dict = {}
             for self.data in self.datas:
                 # print("self.data now: ", self.data._name, self.data._id)
                 Go_long = Long_Core(self.data, Hist_CP=self.p.hist_cp, price_cp=self.p.price_cp)
                 if Go_long is True:
-                    print("self.data now: ", self.data._name, self.data._id)
-                    open_symbol_list.append(self.data._name)
+                    print("\n")
+                    print("self.data Go long is True : ", self.data._name, self.data._id)
+                    open_symbol_list.append(self.data)
+                    # symbol_price_dict[self.data._name] = self.data.close[0]
                     # print("open_symbol_list is ", open_symbol_list)
                     # TODO: 去重，保留近一个月第一次出现的Symbol
 
             if len(open_symbol_list):
-                print("open_symbol_list is ", open_symbol_list)
                 per_weight = 1 / len(open_symbol_list)
                 print("per_weight is :", per_weight)
-                print("open day :", bt.num2date(self.data.lines[6][0]))
-                print("\n")
-                print("\n")
+                print("Long open day :", bt.num2date(self.data.lines[6][0]))
+
+                # TODO: 再从这些中选出特定的 N 支 to buy it
                 for symbol in open_symbol_list:
-                    self.buy()
-                    self.price_range.append(self.data.close[0])
-                    # self.open_date.append(date_now)
+                    print("symbol._name : ", symbol._name, "self.data._id :", symbol._id)
+                    # mainside = self.order_target_percent(data=self.data, target=per_weight)
+                    self.order_target_percent(target=0.1, data=symbol)
+                    # self.buy(data=self.data._name, size=1, exectype=bt.Order.StopTrail, trailpercent=0.02)
+
             else:
                 # print(bt.num2date(self.data.lines[6][0]))
                 # print("当天没有背离发生的Symbol")
                 pass
-
-        else:
-            # TODO: Tage the High Price and cacluate the max & min
-            self.position_days += 1
-            self.price_range.append(self.data.high[0])
-            if self.position_days == 9:
-                self.sell()
-                # print(self.price_range)
+        #
+        # else:
+        #     # TODO: Tage the High Price and cacluate the max & min
+        #     self.position_days += 1
+        #     if self.position_days == 9:
+        #         self.sell()
+        #         print(self.price_range)
 
     def stop(self):
-        price_range = ",".join(str(i) for i in self.price_range)
-        Save_Txt(price_range, "st1_positionRecords_tmp")
-        Save_Txt("\n", "st1_positionRecords_tmp")
-
-        open_date = ",".join(str(i) for i in self.open_date)
-        Save_Txt(open_date, "st1_openDate_tmp")
-        Save_Txt("\n", "st1_openDate_tmp")
-        print("self.price_range is :", self.price_range)
-        print("self.open_date is :", self.open_date)
+        # price_range = ",".join(str(i) for i in self.price_range)
+        # Save_Txt(price_range, "st1_positionRecords_tmp")
+        # Save_Txt("\n", "st1_positionRecords_tmp")
+        #
+        # open_date = ",".join(str(i) for i in self.open_date)
+        # Save_Txt(open_date, "st1_openDate_tmp")
+        # Save_Txt("\n", "st1_openDate_tmp")
+        # print("self.price_range is :", self.price_range)
+        # print("self.open_date is :", self.open_date)
+        pass
 
 
 
@@ -327,7 +331,7 @@ if __name__ == "__main__":
     # OHLCV_single = Fetch_Local_Data(path=datapath)
 
     cerebro = bt.Cerebro()
-    for i, stock_code in enumerate(ts_code_list[:50]):
+    for i, stock_code in enumerate(ts_code_list[:1]):
         # print("Index : {} | Back Now: {}  ".format(i, stock_code))
 
         code_path = stock_code + "." + "csv"
@@ -351,11 +355,12 @@ if __name__ == "__main__":
         # Save_Txt("\n", "st1_openDate_tmp")
 
         # ================ Cerebor head to tail =================
+
     cerebro.addstrategy(MyStragegt)
     # init setting
-    cerebro.broker.setcash(100000000.0)
+    cerebro.broker.setcash(100000.0)
     # cerebro.broker.setcommission(commission=0.0002)
-    cerebro.addsizer(bt.sizers.PercentSizer, percents=50)
+    # cerebro.addsizer(bt.sizers.PercentSizer, percents=90)
 
     # Analyze
     results = cerebro.run()
