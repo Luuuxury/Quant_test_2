@@ -1,17 +1,39 @@
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-import backtrader as bt
+import csv
 import os
-from datetime import datetime
-import calendar
+import sys
+
 import talib
+import datetime
+import warnings
+import calendar
+import tushare as ts
+import numpy as np
+
+warnings.filterwarnings('ignore')
+import pandas as pd
+
+pd.set_option('display.expand_frame_repr', False)
+import backtrader as bt
 import backtrader.feeds as btFeeds
+import backtrader.indicators as btind
 
-numstocks = 5
-final_weight = []
-total_codes = []
+ts.set_token('4fc4dd522aa66c2c91f7c2ad32a92fcc19dc6926deafc6b62fbca017')
 
+
+def Fetch_Stock_Code_List(list_date="20180101"):
+    """
+
+    :return: Stock_List
+    """
+    ts_api = ts.pro_api('e45fdeb7a534ffd3429fceae3bc394fc87b4dfa7b1835ad047de68d7')
+
+    Df_Stocks_info = ts_api.stock_basic(exchange='', list_status='L',
+                                        fields='ts_code,symbol,name,area,industry,list_date')
+    Df_Stocks_info = Df_Stocks_info[Df_Stocks_info["list_date"] < list_date]
+    Df_Stocks_info = Df_Stocks_info[~Df_Stocks_info["name"].str.contains("ST")]
+    ts_code_list = list(Df_Stocks_info['ts_code'])
+
+    return ts_code_list
 
 
 def Fetch_OS_Stockcode(path):
@@ -24,11 +46,146 @@ def Fetch_OS_Stockcode(path):
         list_dir_new.append(stockcode)
     return list_dir_new
 
+
 def Fetch_Local_Data(path):
     df = pd.read_csv(path)
     df['Date'] = pd.to_datetime(df['Date'])
     df.set_index('Date', inplace=True)
     return df
+
+
+def Save_Csv(csv_data, file_name):
+    # path = "/Users/liuyang/Desktop/Finance/Data/Quant_OP_Data/MACD/significance_test/{}.csv".format(file_name)
+    path = r"D:\Finance\Data\Quant_OP_Data\MACD\significance_test\{}".format(file_name)
+    with open(path, "a+", encoding='utf-8-sig') as f:
+        writer = csv.writer(f, dialect="excel")
+        csv_write = csv.writer(f)
+        # csv_data = ["StockCode", "2019","2020", "2021", "2022", "WinNum", "LossNum", "WinRatio", "KellyRatio", "MaxDown", "SharpeRatio"]
+        csv_write.writerow(csv_data)
+        f.close()
+
+
+def Save_Txt(txt_data, file_name):
+    # path = "/Users/liuyang/Desktop/Finance/Data/Quant_OP_Data/MACD/significance_test/{}.txt".format(file_name)
+    path = r"D:\Finance\Data\Quant_OP_Data\MACD\significance_test\{}".format(file_name)
+    with open(path, "a+", encoding='utf-8-sig') as f:
+        f.write(txt_data)
+        f.close()
+
+
+def Red_Split(OHLCV):
+    """
+    :param OHLCV: OHLCV data
+    :return: list - index of hist red green
+    """
+    # Red-1
+    split_index = [0]
+    i = -1
+    while OHLCV.MACD_hist[i] <= 0:
+        i -= 1
+    i += 1
+    split_index.append(i)
+
+    # Green-1
+    split_index.append(i - 1)
+    while OHLCV.MACD_hist[i - 1] >= 0:
+        i -= 1
+    split_index.append(i)
+
+    # Red-2
+    split_index.append(i - 1)
+    while OHLCV.MACD_hist[i - 1] <= 0:
+        i -= 1
+    split_index.append(i)
+
+    # Green-2
+    split_index.append(i - 1)
+    while OHLCV.MACD_hist[i - 1] >= 0:
+        i -= 1
+    split_index.append(i)
+
+    # Red-3
+    split_index.append(i - 1)
+    while OHLCV.MACD_hist[i - 1] <= 0:
+        i -= 1
+    split_index.append(i)
+
+    return split_index
+
+
+def Green_Split(OHLCV):
+    """
+
+    :param OHLCV: self.data
+    :return: list - index of hist green red
+    """
+    # Green-1
+    split_index = [0]
+    i = -1
+    while OHLCV.MACD_hist[i] >= 0:
+        i -= 1
+    i += 1
+    split_index.append(i)
+
+    # Red-1
+    split_index.append(i - 1)
+    while OHLCV.MACD_hist[i - 1] <= 0:
+        i -= 1
+    split_index.append(i)
+
+    # Green-2
+    split_index.append(i - 1)
+    while OHLCV.MACD_hist[i - 1] >= 0:
+        i -= 1
+    split_index.append(i)
+
+    # Red-2
+    split_index.append(i - 1)
+    while OHLCV.MACD_hist[i - 1] <= 0:
+        i -= 1
+    split_index.append(i)
+
+    # Green-3
+    split_index.append(i - 1)
+    while OHLCV.MACD_hist[i - 1] >= 0:
+        i -= 1
+    split_index.append(i)
+
+    return split_index
+
+
+def Long_Core(OHLCV, Hist_CP, price_cp):
+    # print(OHLCV[0])
+    Go_long = False
+    if OHLCV.MACD_hist[0] > 0:
+        pass
+    else:
+        # print("Today is ", bt.num2date(OHLCV.lines[6][0]))
+        split_index = Red_Split(OHLCV)
+        Red_1_Price_Zone = OHLCV.low.get(ago=split_index[0], size=split_index[0] - split_index[1] + 1)
+        Red_2_Price_Zone = OHLCV.low.get(ago=split_index[4], size=split_index[4] - split_index[5] + 1)
+
+        # 前几个周期的数据 指标为Nan，跳过
+        if (len(Red_1_Price_Zone) == 0) | (len(Red_2_Price_Zone) == 0):
+            pass
+        else:
+            Red_1_Min_Price = min(Red_1_Price_Zone)
+            Red_2_Min_Price = min(Red_2_Price_Zone)
+            # Price Double Divergence
+            if Red_1_Min_Price <= Red_2_Min_Price * price_cp:
+                # Hist Check
+                Red_1_Hist_Zone = OHLCV.MACD_hist.get(ago=split_index[0], size=split_index[0] - split_index[1] + 1)
+                Red_2_Hist_Zone = OHLCV.MACD_hist.get(ago=split_index[4], size=split_index[4] - split_index[5] + 1)
+                Red_1_Min_Hist = min(Red_1_Hist_Zone)
+                Red_2_Min_Hist = min(Red_2_Hist_Zone)
+                # Hist Triple Divergence
+                if Red_2_Min_Hist < Red_1_Min_Hist * Hist_CP:
+                    Go_long = True
+                    # print("Go_long Day is ", bt.num2date(OHLCV.lines[6][0]))
+                    # print("Red_1_Min_Price :", Red_1_Price_Zone)
+                    # print("Red_2_Min_Price :", Red_2_Price_Zone)
+    return Go_long
+
 
 def Add_Indicators(OHLCV):
     # Add Indicate data
@@ -40,140 +197,6 @@ def Add_Indicators(OHLCV):
     return OHLCV
 
 
-def risk_min(RandomPortfolios, stock_returns):
-    # 找到标准差最小数据的索引值
-    min_index = RandomPortfolios.Volatility.idxmin()
-    # 在收益-风险散点图中突出风险最小的点
-    RandomPortfolios.plot('Volatility', 'Returns', kind='scatter', alpha=0.3)
-    x = RandomPortfolios.loc[min_index, 'Volatility']
-    y = RandomPortfolios.loc[min_index, 'Returns']
-    plt.scatter(x, y, color='red')
-    # 将该点坐标显示在图中并保留四位小数
-    plt.text(np.round(x, 4), np.round(y, 4), (np.round(x, 4), np.round(y, 4)), ha='left', va='bottom', fontsize=10)
-    plt.show()
-    # 提取最小波动组合对应的权重, 并转换成Numpy数组
-    GMV_weights = np.array(RandomPortfolios.iloc[min_index, 0:numstocks])
-    # 计算GMV投资组合收益
-    stock_returns['Portfolio_GMV'] = stock_returns.mul(GMV_weights, axis=1).sum(axis=1)
-    return GMV_weights
-
-def sharp_max(RandomPortfolios, stock_returns):
-    # 设置无风险回报率为0
-    risk_free = 0
-    # 计算每项资产的夏普比率
-    RandomPortfolios['Sharpe'] = (RandomPortfolios.Returns - risk_free) / RandomPortfolios.Volatility
-    # 绘制收益-标准差的散点图，并用颜色描绘夏普比率
-    plt.scatter(RandomPortfolios.Volatility, RandomPortfolios.Returns, c=RandomPortfolios.Sharpe)
-    plt.colorbar(label='Sharpe Ratio')
-    plt.show()
-
-    # 找到夏普比率最大数据对应的索引值
-    max_index = RandomPortfolios.Sharpe.idxmax()
-    # 在收益-风险散点图中突出夏普比率最大的点
-    RandomPortfolios.plot('Volatility', 'Returns', kind='scatter', alpha=0.3)
-    x = RandomPortfolios.loc[max_index, 'Volatility']
-    y = RandomPortfolios.loc[max_index, 'Returns']
-    plt.scatter(x, y, color='red')
-    # 将该点坐标显示在图中并保留四位小数
-    plt.text(np.round(x, 4), np.round(y, 4), (np.round(x, 4), np.round(y, 4)), ha='left', va='bottom', fontsize=10)
-    plt.show()
-
-    # 提取最大夏普比率组合对应的权重，并转化为numpy数组
-    MSR_weights = np.array(RandomPortfolios.iloc[max_index, 0:numstocks])
-    # 计算MSR组合的收益
-    stock_returns['Portfolio_MSR'] = stock_returns.mul(MSR_weights, axis=1).sum(axis=1)
-    #输出夏普比率最大的投资组合的权重
-    print(MSR_weights)
-    return MSR_weights
-
-def Markowitz(total_codes, stock_returns):
-    # method1:探索投资组合的最有方案，使用蒙特卡洛模拟Markowitz模型
-
-    # 设置模拟的次数
-    number = 1000
-    # 设置空的numpy数组，用于存储每次模拟得到的权重、收益率和标准差
-    random_p = np.empty((number, 7))
-    # 设置随机数种子，这里是为了结果可重复
-    np.random.seed(7)
-
-    # 循环模拟1000次随机的投资组合
-    for i in range(number):
-        # 生成5个随机数，并归一化，得到一组随机的权重数据
-        random5 = np.random.random(5)
-        random_weight = random5 / np.sum(random5)
-
-        # 计算年平均收益率
-        mean_return = stock_returns.mul(random_weight, axis=1).sum(axis=1).mean()
-        annual_return = (1 + mean_return) ** 252 - 1
-
-        # 计算年化标准差，也成为波动率
-        # 计算协方差矩阵
-        cov_mat = stock_returns.cov()
-        # 年化协方差矩阵
-        cov_mat_annual = cov_mat * 252
-        # 输出协方差矩阵
-        print(cov_mat_annual)
-        random_volatility = np.sqrt(np.dot(random_weight.T, np.dot(cov_mat_annual, random_weight)))
-
-        # 将上面生成的权重，和计算得到的收益率、标准差存入数组random_p中
-        random_p[i][:5] = random_weight
-        random_p[i][5] = annual_return
-        random_p[i][6] = random_volatility
-
-    # 将Numpy数组转化为DataF数据框
-    RandomPortfolios = pd.DataFrame(random_p)
-    # 设置数据框RandomPortfolios每一列的名称
-    RandomPortfolios.columns = [code + '_weight' for code in total_codes] + ['Returns', 'Volatility']
-
-    # 绘制散点图
-    RandomPortfolios.plot('Volatility', 'Returns', kind='scatter', alpha=0.3)
-    plt.show()
-
-    # weights = risk_min(RandomPortfolios, stock_returns)
-    weights = sharp_max(RandomPortfolios, stock_returns)
-
-    return weights
-
-def weight_cal(total_codes, stock_returns):
-    stock_returns['time'] = pd.to_datetime(stock_returns['time']).dt.date
-    stock_returns = pd.pivot(stock_returns, index="time", columns="htsc_code", values="close")
-    stock_returns.columns = [col + "_daily_return" for col in stock_returns.columns]
-    stock_returns = stock_returns.pct_change().dropna()
-
-    GMV_weights = Markowitz(total_codes, stock_returns)
-
-    return GMV_weights
-
-def cumulative_returns_plot(name_list, stock_returns):
-    for name in name_list:
-        CumulativeReturns = ((1+stock_returns[name]).cumprod()-1)
-        CumulativeReturns.plot(label=name)
-    plt.legend()
-    plt.show()
-
-def last_day_of_month(any_day):
-    """
-    获取获得一个月中的最后一天
-    :param any_day: 任意日期
-    :return: string
-    """
-    next_month = any_day.replace(day=28) + datetime.timedelta(days=4)  # this will never fail
-    return next_month - datetime.timedelta(days=next_month.day)
-
-class Select_Strategy(bt.Strategy):
-    def __init__(self):
-        self.codes = total_codes
-    def next(self):
-        today = self.data.datetime.date()
-        year, month = today.year, today.month
-        d, month_length = calendar.monthrange(year, month)
-        if today.day == month_length:
-            for i in range(len(self.codes)):
-                final_weight = [0.1, 0.5, 0.3, 0.1, 0.1]
-                self.order_target_percent(target=final_weight[i], data=self.codes[i])
-
-
-
 # Only OHLCV + MACD ATR RSI
 class BasicIndicatorsFeeded(btFeeds.PandasData):
     lines = ('MACD_macd', 'MACD_sign', 'MACD_hist', 'ATR', 'RSI')
@@ -182,16 +205,134 @@ class BasicIndicatorsFeeded(btFeeds.PandasData):
     params = (('MACD_macd', 5), ('MACD_sign', 6), ('MACD_hist', 7), ('ATR', 8), ("RSI", 9))
 
 
+class MyStragegt(bt.Strategy):
+    # https://community.backtrader.com/topic/2759/take-profit-stop-loss/5
+    params = dict(
+        sleep_tag=28,
+        trailpercent=0.05,
+        hist_cp=2,
+        price_cp=1.0,
+    )
 
-if __name__ == '__main__':
+    def __init__(self):
+        self.order = None
+        self.position_days = 0
 
+    def log(self, txt, dt=None):
+        ''' Logging function fot this strategy '''
+        dt = dt or self.data.datetime[0]
+        if isinstance(dt, float):
+            dt = bt.num2date(dt)
+        print('%s, %s' % (dt.isoformat(), txt))
+
+    def notify_order(self, order):
+        if order.status in [order.Submitted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            self.log('ORDER ACCEPTED/SUBMITTED', dt=order.created.dt)
+            self.order = order
+            return
+
+        if order.status in [order.Expired]:
+            self.log('BUY EXPIRED')
+            return
+
+        elif order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(
+                    'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
+                    (order.executed.price,
+                     order.executed.value,
+                     order.executed.comm))
+                return
+
+            else:  # Sell
+                self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
+                         (order.executed.price,
+                          order.executed.value,
+                          order.executed.comm))
+
+                self.position_days = 0
+
+        # Sentinel to None: new orders allowed
+        self.order = None
+
+    def next(self):
+        # print("self.o_lit len is : ", len(self.o_li))
+        # date_now = bt.num2date(self.data.lines[6][0])
+        # print(self.data._name)
+        # TODO: 不管有没有仓位 每天都要检查有没有背离发生，发生了就开今天的仓位
+
+        for self.data in self.datas:
+            today = self.data.datetime.date()
+            year, month = today.year, today.month
+            d, month_length = calendar.monthrange(year, month)
+            if today.day == month_length:
+                # print(("len(data) : ", len(self.datas)))
+                open_symbol_list = []
+                # symbol_price_dict = {}
+            # print("self.data now: ", self.data._name, self.data._id)
+            Go_long = Long_Core(self.data, Hist_CP=self.p.hist_cp, price_cp=self.p.price_cp)
+            if Go_long is True:
+                print("\n")
+                print("self.data Go long is True : ", self.data._name, self.data._id)
+                open_symbol_list.append(self.data)
+                # symbol_price_dict[self.data._name] = self.data.close[0]
+                # print("open_symbol_list is ", open_symbol_list)
+                # TODO: 去重，保留近一个月第一次出现的Symbol
+
+        if len(open_symbol_list):
+            per_weight = 1 / len(open_symbol_list)
+            print("per_weight is :", per_weight)
+            print("Long open day :", bt.num2date(self.data.lines[6][0]))
+
+            # TODO: 再从这些中选出特定的 N 支 to buy it
+            for symbol in open_symbol_list:
+                print("symbol._name : ", symbol._name, "self.data._id :", symbol._id)
+                # mainside = self.order_target_percent(data=self.data, target=per_weight)
+                # self.order_target_percent(target=0.1, data=symbol)
+                # self.buy(data=symbol)
+                self.order_target_percent(target=0.2, data=symbol)
+                # self.buy(data=self.data._name, size=1, exectype=bt.Order.StopTrail, trailpercent=0.02)
+
+    def stop(self):
+        # price_range = ",".join(str(i) for i in self.price_range)
+        # Save_Txt(price_range, "st1_positionRecords_tmp")
+        # Save_Txt("\n", "st1_positionRecords_tmp")
+        #
+        # open_date = ",".join(str(i) for i in self.open_date)
+        # Save_Txt(open_date, "st1_openDate_tmp")
+        # Save_Txt("\n", "st1_openDate_tmp")
+        # print("self.price_range is :", self.price_range)
+        # print("self.open_date is :", self.open_date)
+        pass
+
+
+if __name__ == "__main__":
+
+    """ Single Symbol """
+
+    # ts_code_list = ["000001.SZ"]
+
+    """ All Symbol """
     dirpath = 'D:\Finance\Data\StockData\OHLCV_Data\OHLCV_Daily\OHLCV_None'
     # dirpath = '/Users/liuyang/Desktop/Finance/Data/StockData/OHLCV_Data/OHLCV_Daily/OHLCV_hfq/'
     ts_code_list = Fetch_OS_Stockcode(path=dirpath)
-    cerebro = bt.Cerebro()
 
+    """ Index Content """
+    # ts.set_token('4fc4dd522aa66c2c91f7c2ad32a92fcc19dc6926deafc6b62fbca017')
+    # ts_api = ts.pro_api()
+    # index_weight_sh = ts_api.index_weight(index_code='000002.SH')
+    # ts_code_list = index_weight_sh["con_code"]
+
+    """ If add BenchMark """
+    # datapath = "/Users/liuyang/Desktop/Finance/Data/StockData/OHLCV_Data/Index_OHLCV/HS300.csv"
+    # # datapath = "D:\Finance\Data\StockData\OHLCV_Data\OHLCV_Daily\Index_OHLCV\HS300.csv"
+    # OHLCV_single = Fetch_Local_Data(path=datapath)
+
+    cerebro = bt.Cerebro()
     for i, stock_code in enumerate(ts_code_list[:5]):
-        print("Index : {} | Back Now: {}  ".format(i, stock_code))
+        # print("Index : {} | Back Now: {}  ".format(i, stock_code))
+
         code_path = stock_code + "." + "csv"
 
         # datapath = '/Users/liuyang/Desktop/Finance/Data/StockData/OHLCV_Data/OHLCV_Daily/OHLCV/{}'.format(code_path)
@@ -200,14 +341,36 @@ if __name__ == '__main__':
         OHLCV = OHLCV.drop(['pct_chg', 'amount', 'turnover_rate', 'volume_ratio'], axis=1)
         OHLCV = Add_Indicators(OHLCV)
         # print(OHLCV)
+        # cerebro = bt.Cerebro()
         data = BasicIndicatorsFeeded(dataname=OHLCV)
         cerebro.adddata(data, name=stock_code)
+        print("\r", end="")
+        print("Data feed num : {} : ".format(i), end="")
+        sys.stdout.flush()
 
-    cerebro.addstrategy(Select_Strategy)
-    cerebro.broker.setcash(10000000.0)
+        # Save_Txt(stock_code, "st1_positionRecords_tmp")
+        # Save_Txt("\n", "st1_positionRecords_tmp")
+        # Save_Txt(stock_code, "st1_openDate_tmp")
+        # Save_Txt("\n", "st1_openDate_tmp")
 
-    result = cerebro.run()
-    print(result)
+        # ================ Cerebor head to tail =================
+
+    cerebro.addstrategy(MyStragegt)
+    # init setting
+    cerebro.broker.setcash(100000.0)
+    # cerebro.broker.setcommission(commission=0.0002)
+    # cerebro.addsizer(bt.sizers.PercentSizer, percents=99)
+    cerebro.addsizer(bt.sizers.SizerFix, stake=10)
+
+    # Analyze
+    results = cerebro.run()
     print("value: ", cerebro.broker.get_value())
     print("cash: ", cerebro.broker.getcash())
+
     cerebro.plot()
+
+
+
+
+
+

@@ -5,10 +5,12 @@ import sys
 import talib
 import datetime
 import warnings
+import calendar
 import tushare as ts
 import numpy as np
 warnings.filterwarnings('ignore')
 import pandas as pd
+from queue import Queue
 pd.set_option('display.expand_frame_repr', False)
 import backtrader as bt
 import backtrader.feeds as btFeeds
@@ -210,8 +212,8 @@ class MyStragegt(bt.Strategy):
     def __init__(self):
         self.order = None
         self.position_days = 0
-        self.price_range = []
-        self.open_date = []
+        self.position_queque = Queue(maxsize=0)
+
 
     def log(self, txt, dt=None):
         ''' Logging function fot this strategy '''
@@ -255,44 +257,35 @@ class MyStragegt(bt.Strategy):
         # print("self.o_lit len is : ", len(self.o_li))
         # date_now = bt.num2date(self.data.lines[6][0])
         # print(self.data._name)
+        # TODO: 不管有没有仓位 每天都要检查有没有背离发生，发生了就开今天的仓位
+
         if self.position.size == 0:
-            # print(("len(data) : ", len(self.datas)))
-            open_symbol_list = []
-            # symbol_price_dict = {}
             for self.data in self.datas:
+                print("---------->self.data is {} | self.data Today is : {} ".format(self.data._name,  bt.num2date(self.data.lines[6][0])))
+                if self.data in self.position_queque.queue:
+                    print("self.data is already exitsed ", self.data._name)
+                    continue
+                # print(("len(data) : ", len(self.datas)))
+                open_symbol_list = []
+                # symbol_price_dict = {}
                 # print("self.data now: ", self.data._name, self.data._id)
                 Go_long = Long_Core(self.data, Hist_CP=self.p.hist_cp, price_cp=self.p.price_cp)
                 if Go_long is True:
-                    print("\n")
-                    print("self.data Go long is True : ", self.data._name, self.data._id)
-                    open_symbol_list.append(self.data)
-                    # symbol_price_dict[self.data._name] = self.data.close[0]
-                    # print("open_symbol_list is ", open_symbol_list)
                     # TODO: 去重，保留近一个月第一次出现的Symbol
+                    # TODO: 再从这些中选出特定的 N 支 to buy it
 
-            if len(open_symbol_list):
-                per_weight = 1 / len(open_symbol_list)
-                print("per_weight is :", per_weight)
-                print("Long open day :", bt.num2date(self.data.lines[6][0]))
-
-                # TODO: 再从这些中选出特定的 N 支 to buy it
-                for symbol in open_symbol_list:
-                    print("symbol._name : ", symbol._name, "self.data._id :", symbol._id)
-                    # mainside = self.order_target_percent(data=self.data, target=per_weight)
-                    self.order_target_percent(target=0.1, data=symbol)
+                    print("Today Long Symbol : ", self.data._name)
+                    # self.order_target_percent(target=0.01, data=self.data)
+                    self.buy(data=self.data)
+                    self.position_queque.put(self.data)
                     # self.buy(data=self.data._name, size=1, exectype=bt.Order.StopTrail, trailpercent=0.02)
+        else:
+            self.position_days += 1
+            if self.position_days == 5:
+                for self.data in self.datas:
+                    self.sell(self.data)
+                self.position_queque.queue.clear()
 
-            else:
-                # print(bt.num2date(self.data.lines[6][0]))
-                # print("当天没有背离发生的Symbol")
-                pass
-        #
-        # else:
-        #     # TODO: Tage the High Price and cacluate the max & min
-        #     self.position_days += 1
-        #     if self.position_days == 9:
-        #         self.sell()
-        #         print(self.price_range)
 
     def stop(self):
         # price_range = ",".join(str(i) for i in self.price_range)
@@ -331,7 +324,7 @@ if __name__ == "__main__":
     # OHLCV_single = Fetch_Local_Data(path=datapath)
 
     cerebro = bt.Cerebro()
-    for i, stock_code in enumerate(ts_code_list[:1]):
+    for i, stock_code in enumerate(ts_code_list[:10]):
         # print("Index : {} | Back Now: {}  ".format(i, stock_code))
 
         code_path = stock_code + "." + "csv"
@@ -358,16 +351,17 @@ if __name__ == "__main__":
 
     cerebro.addstrategy(MyStragegt)
     # init setting
-    cerebro.broker.setcash(100000.0)
+    cerebro.broker.setcash(100000000.0)
     # cerebro.broker.setcommission(commission=0.0002)
-    # cerebro.addsizer(bt.sizers.PercentSizer, percents=90)
+    # cerebro.addsizer(bt.sizers.PercentSizer, percents=99)
+    cerebro.addsizer(bt.sizers.SizerFix, stake=10)
 
     # Analyze
     results = cerebro.run()
     print("value: ", cerebro.broker.get_value())
     print("cash: ", cerebro.broker.getcash())
 
-    # cerebro.plot()
+    cerebro.plot()
 
 
 
