@@ -273,7 +273,6 @@ class MyStragegt(bt.Strategy):
                 if Go_long is True:
                     # TODO: 去重，保留近一个月第一次出现的Symbol
                     # TODO: 再从这些中选出特定的 N 支 to buy it
-
                     print("Today Long Symbol : ", self.data._name)
                     # self.order_target_percent(target=0.01, data=self.data)
                     self.buy(data=self.data)
@@ -282,7 +281,7 @@ class MyStragegt(bt.Strategy):
         else:
             self.position_days += 1
             if self.position_days == 5:
-                for self.data in self.datas:
+                for self.data in self.position_queque.queue:
                     self.sell(self.data)
                 self.position_queque.queue.clear()
 
