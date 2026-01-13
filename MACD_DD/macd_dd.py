@@ -15,7 +15,7 @@ pd.set_option('display.expand_frame_repr', False)
 import backtrader as bt
 import backtrader.feeds as btFeeds
 import backtrader.indicators as btind
-ts.set_token('4fc4dd522aa66c2c91f7c2ad32a92fcc19dc6926deafc6b62fbca017')
+ts.set_token('')
 
 
 def Fetch_Stock_Code_List(list_date="20180101"):
@@ -23,7 +23,7 @@ def Fetch_Stock_Code_List(list_date="20180101"):
 
     :return: Stock_List
     """
-    ts_api = ts.pro_api('e45fdeb7a534ffd3429fceae3bc394fc87b4dfa7b1835ad047de68d7')
+    ts_api = ts.pro_api('')
 
     Df_Stocks_info = ts_api.stock_basic(exchange='', list_status='L',
                                         fields='ts_code,symbol,name,area,industry,list_date')
